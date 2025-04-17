@@ -132,6 +132,14 @@ class DeepGCN(torch.nn.Module):
                               nn.Conv2d(1024, opt.n_classes, 1, bias=True))
         self.model_init()
 
+    def zero_transformer(self):
+        for name, module in self.transformer.named_modules():
+            if isinstance(module, torch.nn.Linear):
+                if module.weight is not None:
+                    torch.nn.init.constant_(module.weight, 0.0)
+                if module.bias is not None:
+                    torch.nn.init.constant_(module.bias, 0.0)
+
     def model_init(self):
         for m in self.modules():
             if isinstance(m, torch.nn.Conv2d):
@@ -140,7 +148,8 @@ class DeepGCN(torch.nn.Module):
                 if m.bias is not None:
                     m.bias.data.zero_()
                     m.bias.requires_grad = True
-
+        self.zero_transformer()
+                
     def forward(self, inputs):
         x = self.stem(inputs) + self.pos_embed
         B, C, H, W = x.shape
