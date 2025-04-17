@@ -16,6 +16,9 @@ NVIDIA CUDA specific speedups adopted from NVIDIA Apex examples
 
 Hacked together by / Copyright 2020 Ross Wightman (https://github.com/rwightman)
 """
+
+# python train.py /scratch/graphormer_imagenet/imagenet --model vig_ti_224_gelu --sched cosine --epochs 300 --opt adamw -j 8 --warmup-lr 1e-6 --mixup .8 --cutmix 1.0 --model-ema --model-ema-decay 0.99996 --aa rand-m9-mstd0.5-inc1 --color-jitter 0.4 --warmup-epochs 20 --opt-eps 1e-8 --repeated-aug --remode pixel --reprob 0.25 --amp --lr 2e-3 --weight-decay .05 --drop 0 --drop-path .1 -b 128 --output /afs/ece.cmu.edu/usr/oanaveka/Private/11785/Graphormer/Graphormer/outputs/Graphormer --pretrain_path /scratch/vig_ckpts/vig_ti_74.5.pth
+
 import warnings
 warnings.filterwarnings('ignore')
 import argparse
@@ -42,7 +45,7 @@ from timm.utils import ApexScaler, NativeScaler
 
 from data.myloader import create_loader
 import pyramid_vig
-import vig
+import graphormer
 
 try:
     from apex import amp
@@ -329,7 +332,7 @@ def main():
 
     model = create_model(
         args.model,
-        pretrained=args.pretrained,
+        pretrained=False,
         num_classes=args.num_classes,
         drop_rate=args.drop,
         drop_connect_rate=args.drop_connect,  # DEPRECATED, use drop_path
@@ -340,15 +343,35 @@ def main():
         bn_momentum=args.bn_momentum,
         bn_eps=args.bn_eps,
         checkpoint_path=args.initial_checkpoint)
-        
+    
+    print("MODEL WITH TRANSFORMER\n")
+    print(model)
     ################## pretrain ############
     if args.pretrain_path is not None:
         print('Loading:', args.pretrain_path)
         state_dict = torch.load(args.pretrain_path)
-        model.load_state_dict(state_dict, strict=False)
+
+        # Remove any keys related to transformer
+        filtered_dict = {k: v for k, v in state_dict.items() if not k.startswith('transformer')}
+
+        # Load filtered weights
+        missing, unexpected = model.load_state_dict(filtered_dict, strict=False)
         print('Pretrain weights loaded.')
+        print(f'Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}')
+        
+        # Freeze all weights except transformer
+        for name, param in model.named_parameters():
+            if "transformer" not in name:
+                param.requires_grad = False
+        print('Only training transformer, all other weights frozen')
+        
+        print('Trainable parameters:')
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                print(f' - {name}')
+        
     ################### flops #################
-    print(model)
+    # print(model)
     if hasattr(model, 'default_cfg'):
         default_cfg = model.default_cfg
         input_size = [1] + list(default_cfg['input_size'])
