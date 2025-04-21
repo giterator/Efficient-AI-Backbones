@@ -71,7 +71,7 @@ def create_loader(
         tf_preprocessing=False,
         use_multi_epochs_loader=False,
         repeated_aug=False,
-        subset=False
+        subset_size=160000
 ):
     re_num_splits = 0
     if re_split:
@@ -121,18 +121,11 @@ def create_loader(
             print('using repeated_aug')
             num_tasks = get_world_size()
             global_rank = get_rank()
-            sampler = RASampler(
-                    dataset, num_replicas=num_tasks, rank=global_rank, shuffle=True
-                )
+            sampler = torch.utils.data.RandomSampler(data_source=dataset, replacement=True, num_samples=subset_size)
+            # sampler = RASampler(
+            #         dataset, num_replicas=num_tasks, rank=global_rank, shuffle=True
+            #     )
 
-    if (subset):
-        # Subset dataset
-        subset_size = 1000
-        subset_indices = torch.randperm(len(dataset))[:subset_size]
-        tmp = dataset
-        dataset = torch.utils.data.Subset(dataset, subset_indices)
-    
-        print(f"Old: {len(tmp)} vs New: {len(dataset)}")
     if collate_fn is None:
         collate_fn = fast_collate if use_prefetcher else torch.utils.data.dataloader.default_collate
 

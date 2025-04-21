@@ -363,9 +363,9 @@ def main():
         
         # Freeze all weights except transformer
         for name, param in model.named_parameters():
-            if "transformer" not in name:
+            if "transformer" not in name and "prediction" not in name:
                 param.requires_grad = False
-        print('Only training transformer, all other weights frozen')
+        print('Only training transformer and classifier MLP, all other weights frozen')
         
         print('Trainable parameters:')
         for name, param in model.named_parameters():
@@ -558,7 +558,7 @@ def main():
         pin_memory=args.pin_mem,
         use_multi_epochs_loader=args.use_multi_epochs_loader,
         repeated_aug=args.repeated_aug,
-        subset=True
+        subset_size=167000
     )
 
     eval_dir = os.path.join(args.data, 'val')
