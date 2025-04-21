@@ -277,6 +277,8 @@ parser.add_argument("--pretrain_path", default=None, type=str)
 parser.add_argument("--evaluate", action='store_true', default=False,
                     help='whether evaluate the model')
 
+# Set random seed
+torch.manual_seed(42)
 
 def _parse_args():
     # Do we have a config file to parse?
@@ -555,7 +557,8 @@ def main():
         collate_fn=collate_fn,
         pin_memory=args.pin_mem,
         use_multi_epochs_loader=args.use_multi_epochs_loader,
-        repeated_aug=args.repeated_aug
+        repeated_aug=args.repeated_aug,
+        subset=True
     )
 
     eval_dir = os.path.join(args.data, 'val')
