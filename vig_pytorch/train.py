@@ -346,34 +346,34 @@ def main():
         bn_eps=args.bn_eps,
         checkpoint_path=args.initial_checkpoint)
     
-    print("MODEL WITH TRANSFORMER\n")
-    print(model)
+    # print("MODEL\n")
+    # print(model)
+    
     ################## pretrain ############
     if args.pretrain_path is not None:
         print('Loading:', args.pretrain_path)
         state_dict = torch.load(args.pretrain_path)
 
-        # Remove any keys related to transformer
-        filtered_dict = {k: v for k, v in state_dict.items() if not k.startswith('transformer')}
-
         # Load filtered weights
-        missing, unexpected = model.load_state_dict(filtered_dict, strict=False)
+        missing, unexpected = model.load_state_dict(state_dict, strict=False)
         print('Pretrain weights loaded.')
         print(f'Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}')
         
-        # Freeze all weights except transformer
+        # Freeze all weights except prediction
         for name, param in model.named_parameters():
-            if "transformer" not in name and "prediction" not in name:
+            if "prediction" not in name:
                 param.requires_grad = False
-        print('Only training transformer and classifier MLP, all other weights frozen')
         
-        print('Trainable parameters:')
-        for name, param in model.named_parameters():
-            if param.requires_grad:
-                print(f' - {name}')
+        # Unfreeze all the graph attention transformers
+        for seq in model.backbone:
+            seq[-1].unfreeze_weights()
+                
+        # print('Trainable parameters:')
+        # for name, param in model.named_parameters():
+        #     if param.requires_grad:
+        #         print(f' - {name}')
         
     ################### flops #################
-    # print(model)
     if hasattr(model, 'default_cfg'):
         default_cfg = model.default_cfg
         input_size = [1] + list(default_cfg['input_size'])
@@ -558,7 +558,7 @@ def main():
         pin_memory=args.pin_mem,
         use_multi_epochs_loader=args.use_multi_epochs_loader,
         repeated_aug=args.repeated_aug,
-        subset_size=50000
+        subset_size=1000
     )
 
     eval_dir = os.path.join(args.data, 'val')

@@ -84,7 +84,44 @@ class Stem(nn.Module):
         x = self.convs(x)
         return x
 
+class GraphAttention(torch.nn.Module):
+    def __init__(self, dim, num_heads=4):
+        super(GraphAttention, self).__init__()
+        self.transformer = TransformerBlock(
+            dim=dim, 
+            num_heads=num_heads
+        )
+        
+        # Zero out weights
+        for _, module in self.transformer.named_modules():
+            if isinstance(module, torch.nn.Linear):
+                if module.weight is not None:
+                    torch.nn.init.constant_(module.weight, 0.0)
+                if module.bias is not None:
+                    torch.nn.init.constant_(module.bias, 0.0)
+                    
+    def unfreeze_weights(self):
+        for param in self.parameters():
+            param.requires_grad = True
+            
+    def forward(self, x):
+        B, C, H, W = x.shape
+        
+        # (B, C, H, W) -> (B, C, H*W)
+        x_flat = x.flatten(2)
+        # (B, C, H*W) -> (B, H*W, C)
+        x_flat_t = x_flat.transpose(1, 2)
 
+        # Apply transformer
+        x_flat_t = self.transformer(x_flat_t)
+        
+        # (B, H*W, C) -> (B, C, H*W)
+        x_flat = x_flat_t.transpose(1, 2)
+        # (B, C, H*W) -> (B, C, H, W)
+        x = x_flat.reshape(B, C, H, W)
+        
+        return x
+        
 class DeepGCN(torch.nn.Module):
     def __init__(self, opt):
         super(DeepGCN, self).__init__()
@@ -112,18 +149,15 @@ class DeepGCN(torch.nn.Module):
         if opt.use_dilation:
             self.backbone = Seq(*[Seq(Grapher(channels, num_knn[i], min(i // 4 + 1, max_dilation), conv, act, norm,
                                                 bias, stochastic, epsilon, 1, drop_path=dpr[i]),
-                                      FFN(channels, channels * 4, act=act, drop_path=dpr[i])
+                                      FFN(channels, channels * 4, act=act, drop_path=dpr[i]),
+                                      GraphAttention(dim=channels, num_heads=4)
                                      ) for i in range(self.n_blocks)])
         else:
             self.backbone = Seq(*[Seq(Grapher(channels, num_knn[i], 1, conv, act, norm,
                                                 bias, stochastic, epsilon, 1, drop_path=dpr[i]),
-                                      FFN(channels, channels * 4, act=act, drop_path=dpr[i])
+                                      FFN(channels, channels * 4, act=act, drop_path=dpr[i]),
+                                      GraphAttention(dim=channels, num_heads=4)
                                      ) for i in range(self.n_blocks)])
-
-        self.transformer = TransformerBlock(
-            dim=channels, 
-            num_heads=4, # TODO: Change if needed
-        )
 
         self.prediction = Seq(nn.Conv2d(channels, 1024, 1, bias=True),
                               nn.BatchNorm2d(1024),
@@ -131,14 +165,6 @@ class DeepGCN(torch.nn.Module):
                               nn.Dropout(opt.dropout),
                               nn.Conv2d(1024, opt.n_classes, 1, bias=True))
         self.model_init()
-
-    def zero_transformer(self):
-        for name, module in self.transformer.named_modules():
-            if isinstance(module, torch.nn.Linear):
-                if module.weight is not None:
-                    torch.nn.init.constant_(module.weight, 0.0)
-                if module.bias is not None:
-                    torch.nn.init.constant_(module.bias, 0.0)
 
     def model_init(self):
         for m in self.modules():
@@ -148,27 +174,12 @@ class DeepGCN(torch.nn.Module):
                 if m.bias is not None:
                     m.bias.data.zero_()
                     m.bias.requires_grad = True
-        self.zero_transformer()
                 
     def forward(self, inputs):
         x = self.stem(inputs) + self.pos_embed
-        B, C, H, W = x.shape
         
         for i in range(self.n_blocks):
             x = self.backbone[i](x)
-
-        # (B, C, H, W) -> (B, C, H*W)
-        x_flat = x.flatten(2)
-        # (B, C, H*W) -> (B, H*W, C)
-        x_flat_t = x_flat.transpose(1, 2)
-
-        # Apply transformer
-        x_flat_t = self.transformer(x_flat_t)
-        
-        # (B, H*W, C) -> (B, C, H*W)
-        x_flat = x_flat_t.transpose(1, 2)
-        # (B, C, H*W) -> (B, C, H, W)
-        x = x_flat.reshape(B, C, H, W)
 
         x = F.adaptive_avg_pool2d(x, 1)
         return self.prediction(x).squeeze(-1).squeeze(-1)
