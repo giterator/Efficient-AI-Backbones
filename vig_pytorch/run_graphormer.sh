@@ -5,7 +5,7 @@
 python train.py /scratch/graphormer_imagenet/imagenet \
   --model vig_ti_224_gelu \
   --sched cosine \
-  --epochs 20 \
+  --epochs 30 \
   --opt adamw \
   -j 8 \
   --warmup-lr 1e-6 \
