@@ -121,10 +121,10 @@ def create_loader(
             print('using repeated_aug')
             num_tasks = get_world_size()
             global_rank = get_rank()
-            sampler = torch.utils.data.RandomSampler(data_source=dataset, replacement=True, num_samples=subset_size)
-            # sampler = RASampler(
-            #         dataset, num_replicas=num_tasks, rank=global_rank, shuffle=True
-            #     )
+            # sampler = torch.utils.data.RandomSampler(data_source=dataset, replacement=True, num_samples=subset_size)
+            sampler = RASampler(
+                    dataset, num_replicas=num_tasks, rank=global_rank, shuffle=True
+                )
 
     if collate_fn is None:
         collate_fn = fast_collate if use_prefetcher else torch.utils.data.dataloader.default_collate

@@ -558,7 +558,7 @@ def main():
         pin_memory=args.pin_mem,
         use_multi_epochs_loader=args.use_multi_epochs_loader,
         repeated_aug=args.repeated_aug,
-        subset_size=167000
+        subset_size=50000
     )
 
     eval_dir = os.path.join(args.data, 'val')
